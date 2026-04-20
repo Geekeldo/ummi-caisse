@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(magick public/logo.png -resize 144x144 public/icon-144.png)",
+      "Bash(magick public/logo.png -resize 96x96 public/icon-96.png)",
+      "Bash(magick public/logo.png -resize 72x72 public/icon-72.png)",
+      "Bash(magick public/logo.png -resize 48x48 public/icon-48.png)",
+      "Bash(ls -la public/icon-*.png)",
+      "Bash(npm ls *)"
+    ]
+  }
+}

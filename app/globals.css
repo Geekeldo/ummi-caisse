@@ -1,0 +1,159 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand-400: #5E8981;
+    --brand-500: #3F5E5A;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans text-gray-900 antialiased;
+    background: #F5F6F8;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    @apply transition-colors duration-100;
+  }
+
+  /* Better scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-200 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-300; }
+
+  /* Number inputs: remove spinners */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+
+  /* ── Cards ─────────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100/80 overflow-hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+  }
+
+  .card-header {
+    @apply px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-white;
+  }
+
+  .card-body {
+    @apply p-5;
+  }
+
+  /* ── Inputs ─────────────────────────────────────────────── */
+  .input-field {
+    @apply w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm
+           font-sans transition-all duration-150 outline-none
+           placeholder:text-gray-300
+           focus:border-brand-400 focus:ring-2 focus:ring-brand-400/10;
+  }
+
+  .input-mono {
+    @apply input-field font-mono tracking-tight;
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold
+           bg-brand-400 text-white transition-all duration-150
+           hover:bg-brand-500 active:scale-[0.97] shadow-sm shadow-brand-400/20;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium
+           text-gray-500 border border-dashed border-gray-300 transition-all duration-150
+           hover:border-gray-400 hover:text-gray-700 hover:bg-gray-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold
+           bg-danger-50 text-danger-600 transition-all duration-150
+           hover:bg-danger-100 active:scale-[0.97];
+  }
+
+  .btn-icon {
+    @apply p-1.5 rounded-lg text-gray-400 transition-all duration-150
+           hover:text-gray-700 hover:bg-gray-100 active:scale-95;
+  }
+
+  /* ── Badges ─────────────────────────────────────────────── */
+  .pill {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  /* ── KPI ─────────────────────────────────────────────────── */
+  .kpi-card {
+    @apply bg-white rounded-2xl border border-gray-100 p-4 space-y-1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  /* ── Typography ──────────────────────────────────────────── */
+  .label {
+    @apply text-[10px] font-semibold text-gray-400 uppercase tracking-widest;
+  }
+
+  .mono-num {
+    @apply font-mono font-semibold tracking-tight tabular-nums;
+  }
+
+  /* ── Navigation ──────────────────────────────────────────── */
+  .nav-item {
+    @apply flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium
+           whitespace-nowrap transition-all duration-150 cursor-pointer;
+  }
+
+  .nav-item-active {
+    @apply nav-item bg-brand-50 text-brand-600 font-semibold;
+    box-shadow: inset 0 0 0 1px rgba(63,94,90,0.14);
+  }
+
+  .nav-item-inactive {
+    @apply nav-item text-gray-400 hover:text-gray-700 hover:bg-gray-50;
+  }
+
+  /* ── Tables ─────────────────────────────────────────────── */
+  .table-header {
+    @apply text-[10px] font-semibold text-gray-400 uppercase tracking-widest px-3 py-2.5;
+  }
+
+  .table-cell {
+    @apply px-3 py-3 text-sm;
+  }
+
+  /* ── Animations ──────────────────────────────────────────── */
+  .animate-fade-up {
+    animation: fadeUp 0.18s ease-out both;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.15s ease-out both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+}
