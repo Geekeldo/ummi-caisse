@@ -10,12 +10,13 @@ export function computeCaisse(
   totalSalary: number,
   tpeAmount: number,
   coffreDepose: number,
-  previousDaySolde: number | null // null = first day of month
+  previousDaySolde: number | null, // null = first day of month
+  cashInjection: number = 0        // super-admin manual injection
 ): CaisseState {
   const restantVeille = previousDaySolde ?? CAISSE_INIT
   // Toutes les recettes (espèces + carte) entrent dans la caisse
   const recetteEspece = totalRevenue
-  const totalEntree = restantVeille + recetteEspece
+  const totalEntree = restantVeille + recetteEspece + cashInjection
   // TPE = argent viré à la banque (sort de la caisse physique)
   // Coffre = argent déposé au coffre (sort de la caisse physique)
   const totalSortie = tpeAmount + totalExpense + totalSalary + coffreDepose
@@ -29,6 +30,7 @@ export function computeCaisse(
     tpe_amount: tpeAmount,
     recette_espece: recetteEspece,
     restant_veille: restantVeille,
+    cash_injection: cashInjection,
     total_entree: totalEntree,
     total_sortie: totalSortie,
     solde,

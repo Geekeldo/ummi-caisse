@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { computeCaisse, formatNumber, MONTHS_FR } from '@/lib/business'
 import { EmptyState } from '@/components/ui'
 import CalendarPicker from '@/components/ui/calendar-picker'
-import { Plus, X, CreditCard, Vault, TrendingUp, TrendingDown, Camera, AlertTriangle } from 'lucide-react'
+import { Plus, X, CreditCard, Vault, TrendingUp, TrendingDown, Camera, AlertTriangle, Banknote } from 'lucide-react'
 import { logActivity } from '@/lib/log-activity'
 import { cn } from '@/lib/utils'
 
@@ -33,9 +33,11 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true)
 
   const [serveurs, setServeurs] = useState<{ id: string; name: string }[]>([])
+  const [allEmployees, setAllEmployees] = useState<{ id: string; name: string }[]>([])
   const [supplierNames, setSupplierNames] = useState<string[]>([])
 
   const readOnly = !can('daily.write')
+  const isSuperAdmin = user?.role?.name === 'super_admin'
 
   // Track logged values to avoid duplicate activity logs on every keystroke
   const loggedRef = useRef<Record<string, number>>({})
@@ -67,6 +69,7 @@ export default function DailyPage() {
         ['serveur', 'serveuse', 'manager'].includes((e.position || '').toLowerCase())
       )
       setServeurs(srv.length > 0 ? srv : allEmp)
+      setAllEmployees(allEmp)
       setSupplierNames((suppRes.data || []).map((s: any) => s.name))
     }
     load()
@@ -201,7 +204,8 @@ export default function DailyPage() {
     const tSal = salaries.reduce((s, r) => s + Number(r.amount || 0), 0)
     const tpe = Number(entry?.tpe_amount || 0)
     const coffre = Number(entry?.coffre_depose || 0)
-    return computeCaisse(totalNetRevenue, tExp, tSal, tpe, coffre, prevSolde)
+    const injection = Number(entry?.cash_injection || 0)
+    return computeCaisse(totalNetRevenue, tExp, tSal, tpe, coffre, prevSolde, injection)
   }, [totalNetRevenue, expenses, salaries, entry, prevSolde])
 
   // ── Auto-save reste_en_caisse whenever caisse changes ──
@@ -234,6 +238,19 @@ export default function DailyPage() {
           userId: user.id, userName: user.full_name,
           action: `Dépôt coffre : ${value} DH`,
           category: 'coffre_depot',
+          amount: value,
+          date: dateStr, monthKey,
+        })
+      )
+    }
+
+    // Journal : injection caisse (super admin)
+    if (field === 'cash_injection' && value !== 0 && user) {
+      logOnce(`inject_${dateStr}`, value, () =>
+        logActivity({
+          userId: user.id, userName: user.full_name,
+          action: `Injection caisse : ${value} DH`,
+          category: 'cash_injection',
           amount: value,
           date: dateStr, monthKey,
         })
@@ -486,6 +503,26 @@ export default function DailyPage() {
               {totalCancellations > 0 && (
                 <CalcRow label="Recettes nettes" value={totalNetRevenue} bold accent="brand" />
               )}
+
+              {isSuperAdmin && (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <Banknote size={12} className="text-gray-300" />
+                    <span className="text-xs text-gray-500">Injection caisse</span>
+                  </div>
+                  <div className="w-28">
+                    <InlineInput
+                      value={entry?.cash_injection || 0}
+                      onCommit={v => updateEntry('cash_injection', v)}
+                      disabled={readOnly}
+                    />
+                  </div>
+                </div>
+              )}
+              {!isSuperAdmin && Number(entry?.cash_injection || 0) !== 0 && (
+                <CalcRow label="Injection caisse" value={Number(entry?.cash_injection || 0)} accent="brand" />
+              )}
+
               <div className="border-t border-gray-100 pt-1.5 mt-1.5">
                 <CalcRow label="Total entrée" value={caisse.total_entree} bold accent="brand" />
               </div>
@@ -805,7 +842,7 @@ export default function DailyPage() {
 
       {/* Datalists */}
       <datalist id="employees-list">
-        {serveurs.map(s => <option key={s.id} value={s.name} />)}
+        {allEmployees.map(s => <option key={s.id} value={s.name} />)}
       </datalist>
       <datalist id="suppliers-list">
         {supplierNames.map(n => <option key={n} value={n} />)}

@@ -3,71 +3,103 @@
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Loader2, Coffee } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function LoginPage() {
-  const supabase = useRef(createClient()).current
+  const { login, loading: authLoading, error: authError, user } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [logoUrl, setLogoUrl] = useState<string>(() =>
-    typeof window !== 'undefined' ? (localStorage.getItem('lb_logo_url') || '') : ''
-  )
+  const [localLoading, setLocalLoading] = useState(false)
   const router = useRouter()
 
+  const [logoUrl, setLogoUrl] = useState('')
+
+  // Charger le logo depuis le cache puis DB
+  // Charger le logo depuis le cache puis DB
+useEffect(() => {
+  const cached = localStorage.getItem('lb_logo_url')
+  if (cached) {
+    setLogoUrl(cached)
+    return
+  }
+
+  const fetchLogo = async () => {
+    try {
+      const { data } = await createClient()
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'logo_url')
+        .maybeSingle()
+
+      if (data?.value) {
+        setLogoUrl(data.value)
+        localStorage.setItem('lb_logo_url', data.value)
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
+  fetchLogo()
+}, [])
+
+  // Si déjà connecté, rediriger
   useEffect(() => {
-    if (logoUrl) return
-    createClient()
-      .from('app_settings').select('value').eq('key', 'logo_url').single()
-      .then(({ data }) => { if (data?.value) { setLogoUrl(data.value); localStorage.setItem('lb_logo_url', data.value) } })
-  }, [logoUrl])
+    if (user && !authLoading) {
+      const roleName = user.role?.name || ''
+      if (roleName === 'super_admin') router.push('/dashboard')
+      else if (roleName === 'cuisinier') router.push('/inventory')
+      else router.push('/daily')
+    }
+  }, [user, authLoading, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError(error.message === 'Invalid login credentials'
-        ? 'Email ou mot de passe incorrect'
-        : error.message)
-      setLoading(false)
-    } else {
-      router.push('/dashboard')
-      router.refresh()
-    }
+    setLocalLoading(true)
+    await login(email, password)
+    setLocalLoading(false)
   }
+
+  const loading = localLoading || authLoading
+  const error = authError
 
   return (
     <div className="min-h-screen flex">
 
       {/* ── Left panel: brand ─────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[52%] flex-col items-center justify-center relative overflow-hidden"
-        style={{ background: '#1D2D2B' }}>
-
-        {/* Subtle radial glow (gold) */}
-        <div className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 60%, rgba(184,149,106,0.12) 0%, transparent 70%)' }} />
-
-        {/* Grid texture */}
-        <div className="absolute inset-0 opacity-[0.025]"
+      <div
+        className="hidden lg:flex lg:w-[52%] flex-col items-center justify-center relative overflow-hidden"
+        style={{ background: '#1D2D2B' }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
-            backgroundSize: '40px 40px'
-          }} />
+            background:
+              'radial-gradient(ellipse 60% 50% at 50% 60%, rgba(184,149,106,0.12) 0%, transparent 70%)',
+          }}
+        />
 
-        {/* Content */}
+        <div
+          className="absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+          }}
+        />
+
         <div className="relative z-10 flex flex-col items-center text-center px-12">
-          {/* Logo */}
           <div className="mb-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logoUrl || '/logo.png'}
               alt="UMMI"
               className="w-48 h-48 rounded-3xl object-contain"
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+              onError={(e) => {
+                ;(e.target as HTMLImageElement).style.display = 'none'
+              }}
             />
           </div>
 
@@ -81,10 +113,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Bottom tag */}
-        <p className="absolute bottom-8 text-white/15 text-[11px] tracking-wider">
-          UMMI
-        </p>
+        <p className="absolute bottom-8 text-white/15 text-[11px] tracking-wider">UMMI</p>
       </div>
 
       {/* ── Right panel: form ─────────────────────────────── */}
@@ -98,10 +127,11 @@ export default function LoginPage() {
               src={logoUrl || '/logo.png'}
               alt="UMMI"
               className="w-14 h-14 rounded-xl object-contain"
-              onError={e => {
+              onError={(e) => {
                 const el = e.target as HTMLImageElement
                 el.style.display = 'none'
-                el.parentElement!.innerHTML = '<span style="color:#C49A58;font-size:22px;font-weight:700">U</span>'
+                el.parentElement!.innerHTML =
+                  '<span style="color:#C49A58;font-size:22px;font-weight:700">U</span>'
               }}
             />
           </div>
@@ -113,16 +143,20 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-6">
             <h2 className="text-2xl font-bold tracking-tight text-gray-900">Connexion</h2>
-            <p className="text-sm text-gray-400 mt-1">Entrez vos identifiants pour accéder au tableau de bord</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Entrez vos identifiants pour accéder au tableau de bord
+            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</label>
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                Email
+              </label>
               <input
                 type="email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 className="input-field h-11"
                 placeholder="salah@ummi.ma"
                 required
@@ -131,12 +165,14 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Mot de passe</label>
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                Mot de passe
+              </label>
               <div className="relative">
                 <input
                   type={showPw ? 'text' : 'password'}
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="input-field h-11 pr-10"
                   placeholder="••••••••"
                   required
@@ -153,7 +189,9 @@ export default function LoginPage() {
 
             {error && (
               <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
-                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-red-100 flex items-center justify-center text-[10px] font-bold">!</span>
+                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-red-100 flex items-center justify-center text-[10px] font-bold">
+                  !
+                </span>
                 {error}
               </div>
             )}

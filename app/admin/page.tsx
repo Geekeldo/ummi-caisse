@@ -11,6 +11,7 @@ import type { AppModule } from '@/types'
 import { formatDH, getMonthKey, MONTHS_FR } from '@/lib/business'
 import { Plus, X, Check, Shield, Users, Settings, Activity, Eye, EyeOff, Upload, ImageIcon, Vault, TrendingDown, ShoppingCart, Coins, Trash2, Pencil, Loader2 } from 'lucide-react'
 import MonthPicker from '@/components/ui/month-picker'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 
 function checkSuperAdmin(roles: any[], roleId: string | null): boolean {
   if (!roleId) return false
@@ -25,7 +26,7 @@ const moduleLabels: Record<AppModule, string> = {
   employees: 'Équipe',
   suppliers: 'Fournisseurs',
   orders: 'Commandes',
-  charges: 'Charges fixes',
+  charges: 'Charges',
   safe: 'Coffre',
   inventory: 'Stock',
   admin: 'Administration',
@@ -63,8 +64,12 @@ export default function AdminPage() {
   const [editForm, setEditForm] = useState({ full_name: '', email: '', role_id: '', password: '' })
   const [showEditPwd, setShowEditPwd] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
+  const [deleteUserOpen, setDeleteUserOpen] = useState(false)
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false)
+  const [deleteRoleOpen, setDeleteRoleOpen] = useState(false)
+  const [deleteRoleId, setDeleteRoleId] = useState<string | null>(null)
+  const [deleteRoleLoading, setDeleteRoleLoading] = useState(false)
 
   // ── Journal d'activité ──
   const [suiviMonth, setSuiviMonth] = useState(() => getMonthKey(new Date()))
@@ -297,7 +302,7 @@ export default function AdminPage() {
         color: newRoleColor,
         permissions: [],
         is_system: false,
-      }).select().single()
+      }).select().maybeSingle()
       if (err) throw err
       if (data) { setRoles(prev => [...prev, data]); setNewRoleName(''); setNewRoleLabel(''); setShowAddRole(false) }
     } catch (err: any) { setError(err.message) }

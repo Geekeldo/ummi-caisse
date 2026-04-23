@@ -19,12 +19,11 @@ const NAV_ITEMS: { id: AppModule; label: string; href: string; icon: typeof Layo
   { id: 'suppliers', label: 'Fournisseurs',  href: '/suppliers', icon: Truck },
   { id: 'orders',    label: 'Commandes',     href: '/orders',    icon: ShoppingCart },
   { id: 'inventory', label: 'Inventaire',    href: '/inventory', icon: Package },
-  { id: 'charges',   label: 'Charges fixes', href: '/charges',   icon: Receipt },
+  { id: 'charges',   label: 'Charges',       href: '/charges',   icon: Receipt },
   { id: 'safe',      label: 'Coffre',        href: '/safe',      icon: Lock },
   { id: 'admin',     label: 'Admin',         href: '/admin',     icon: Shield },
 ]
 
-// ── Role badge colours ──────────────────────────────────────
 const ROLE_PILL: Record<string, string> = {
   super_admin: 'bg-amber-500/20 text-amber-400',
   admin:       'bg-brand-500/20 text-brand-400',
@@ -32,7 +31,6 @@ const ROLE_PILL: Record<string, string> = {
   default:     'bg-white/10 text-white/40',
 }
 
-// ── Fallback logo (utilisé tant que le vrai logo n'est pas chargé) ──
 const FALLBACK_LOGO = '/logo.png'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -41,11 +39,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  // ✅ Toujours initialiser à '' pour éviter le mismatch SSR/client
   const [logoUrl, setLogoUrl] = useState('')
   const [logoReady, setLogoReady] = useState(false)
 
-  // ✅ Lire le localStorage côté client uniquement, dans un useEffect
+  // Lire le localStorage côté client uniquement
   useEffect(() => {
     const cached = localStorage.getItem('lb_logo_url')
     if (cached) {
@@ -55,21 +52,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   // Load logo from DB si pas en cache
-  useEffect(() => {
-    if (!logoReady) return
-    if (logoUrl) return
-    createClient()
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'logo_url')
-      .single()
-      .then(({ data }) => {
-        if (data?.value) {
-          setLogoUrl(data.value)
-          localStorage.setItem('lb_logo_url', data.value)
-        }
-      })
-  }, [logoReady, logoUrl])
+// Load logo from DB si pas en cache
+useEffect(() => {
+  if (!logoReady) return
+  if (logoUrl) return
+
+  const fetchLogo = async () => {
+    try {
+      const { data } = await createClient()
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'logo_url')
+        .maybeSingle()
+
+      if (data?.value) {
+        setLogoUrl(data.value)
+        localStorage.setItem('lb_logo_url', data.value)
+      }
+    } catch (err) {
+      console.error('Failed to load logo:', err)
+    }
+  }
+
+  fetchLogo()
+}, [logoReady, logoUrl])
 
   // Listen for logo updates from admin panel (cross-tab)
   useEffect(() => {
@@ -80,7 +86,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  // ✅ Source du logo stable (pas de branche serveur/client)
   const logoSrc = logoUrl || FALLBACK_LOGO
 
   if (loading || !user) {
@@ -111,13 +116,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const roleName = user?.role?.name || 'default'
   const filteredNav = NAV_ITEMS.filter(item => {
-    // dashboard: super_admin only
     if (item.id === 'dashboard') return isSuperAdmin(user as any)
-    // admin tab: admin + super_admin
     if (item.id === 'admin') return isAdmin(user as any)
-    // charges: super_admin only
     if (item.id === 'charges') return isSuperAdmin(user as any)
-    // cuisinier: orders + inventory + suppliers
     if (roleName === 'cuisinier') return item.id === 'orders' || item.id === 'inventory' || item.id === 'suppliers'
     return canAccess(user as any, item.id)
   })

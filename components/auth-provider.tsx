@@ -1,4 +1,3 @@
-// components/auth-provider.tsx
 'use client'
 
 import type { ReactNode } from 'react'

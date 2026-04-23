@@ -6,6 +6,7 @@ export type ActivityCategory =
   | 'commande'
   | 'avance_salaire'
   | 'inventaire'
+  | 'cash_injection'
   | 'autre'
 
 export interface ActivityPayload {

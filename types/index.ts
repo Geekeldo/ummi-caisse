@@ -74,12 +74,15 @@ export interface Employee {
   hire_date: string
 }
 
+export type ChargeCategory = 'fixed' | 'other'
+
 export interface MonthlyCharge {
   id: string
   label: string
   amount: number
   payment_method: string
   month_key: string // '2026-04'
+  category: ChargeCategory
 }
 
 // ─── Daily Entry (the CORE input) ────────────────────────
@@ -91,6 +94,7 @@ export interface DailyEntry {
   filled_by_name?: string
   tpe_amount: number
   coffre_depose: number
+  cash_injection: number // super-admin only: manual cash injected into the caisse
   created_at: string
   updated_at: string
 }
@@ -145,7 +149,8 @@ export interface CaisseState {
   tpe_amount: number
   recette_espece: number // revenue - tpe
   restant_veille: number // previous day solde or CAISSE_INIT
-  total_entree: number // restant_veille + recette_espece
+  cash_injection: number // super-admin manual injection
+  total_entree: number // restant_veille + recette_espece + cash_injection
   total_sortie: number // expense + salary
   solde: number // entree - sortie
   coffre_depose: number

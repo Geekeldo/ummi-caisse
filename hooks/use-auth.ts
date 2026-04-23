@@ -1,4 +1,3 @@
-// hooks/use-auth.ts
 'use client'
 
 import {
@@ -13,19 +12,21 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
+// ─── Types ─────────────────────────────────────────────────────────────────
+
 export interface AuthUser {
   id: string
   email: string
   full_name: string
   role_id: string
-  role?: {
+  role: {
     id: string
     name: string
     label: string
     color: string
     permissions: string[]
     is_system?: boolean
-  }
+  } | null
   permissions: string[]
   is_active?: boolean
 }
@@ -43,70 +44,107 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
 
-export function useAuthLogic() {
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function getRedirectPath(roleName: string): string {
+  switch (roleName) {
+    case 'super_admin':
+      return '/dashboard'
+    case 'cuisinier':
+      return '/inventory'
+    default:
+      return '/daily'
+  }
+}
+
+// ─── Hook principal ────────────────────────────────────────────────────────
+
+export function useAuthLogic(): AuthContextValue {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const supabase = useRef(createClient()).current
 
-  const loadProfile = useCallback(async (session: any): Promise<AuthUser | null> => {
-    if (!session?.user) return null
+  // Lazy ref : createClient() n'est appelé qu'une seule fois
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
+  if (!supabaseRef.current) supabaseRef.current = createClient()
+  const supabase = supabaseRef.current
 
-    try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*, role:roles(*)')
-        .eq('id', session.user.id)
-        .single()
+  // Ref pour éviter les race conditions sur les loads concurrents
+  const loadIdRef = useRef(0)
 
-      if (profileError || !profile) return null
+  // Flag : login() est en cours, le listener ne doit pas interférer
+  const loginInProgressRef = useRef(false)
 
-      const rolePerms = Array.isArray(profile.role?.permissions)
-        ? (profile.role.permissions as string[])
-        : []
+  // ── loadProfile ──────────────────────────────────────────────────────────
 
-      return {
-        id: profile.id,
-        email: profile.email || session.user.email || '',
-        full_name: profile.full_name || '',
-        role_id: profile.role_id,
-        role: profile.role || null,
-        permissions: rolePerms,
-        is_active: profile.is_active,
+  const loadProfile = useCallback(
+    async (
+      session: { user: { id: string; email?: string } } | null,
+    ): Promise<AuthUser | null> => {
+      if (!session?.user) return null
+
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*, role:roles(*)')
+          .eq('id', session.user.id)
+          .single()
+
+        if (profileError || !profile) {
+          console.error('loadProfile: query error', profileError)
+          return null
+        }
+
+        const rolePerms = Array.isArray(profile.role?.permissions)
+          ? (profile.role.permissions as string[])
+          : []
+
+        return {
+          id: profile.id,
+          email: profile.email || session.user.email || '',
+          full_name: profile.full_name || '',
+          role_id: profile.role_id,
+          role: profile.role || null,
+          permissions: rolePerms,
+          is_active: profile.is_active,
+        }
+      } catch (e) {
+        console.error('loadProfile error:', e)
+        return null
       }
-    } catch {
-      return null
-    }
-  }, [supabase])
+    },
+    [supabase],
+  )
 
-  // ── Auth initialization ──
-  // Two-part approach:
-  // 1) getSession() for immediate init (resilient lock handles conflicts)
-  // 2) onAuthStateChange for subsequent events (sign-in, sign-out, token refresh)
-  // No initDone ref — React cleanup handles unsubscription naturally.
+  // ── Auth initialization ──────────────────────────────────────────────────
+
   useEffect(() => {
     let mounted = true
 
-    // Part 1: Get initial session directly
-    // Race against a timeout so a hung Supabase call can't freeze the
-    // loading screen indefinitely on refresh (root cause of "page doesn't
-    // load on refresh, no error"). After the timeout we fall back to
-    // no-session, and the middleware redirect will handle the rest.
     const getInitialSession = async () => {
+      const currentLoadId = ++loadIdRef.current
+
       try {
-        const sessionPromise = supabase.auth.getSession().then(r => r.data.session)
-        const timeoutPromise = new Promise<null>(resolve =>
-          setTimeout(() => resolve(null), 5000)
+        const sessionPromise = supabase.auth
+          .getSession()
+          .then((r) => r.data.session)
+
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 5_000),
         )
+
         const session = await Promise.race([sessionPromise, timeoutPromise])
-        if (!mounted) return
+
+        if (!mounted || currentLoadId !== loadIdRef.current) return
 
         if (session) {
           const authUser = await loadProfile(session)
-          if (!mounted) return
+          if (!mounted || currentLoadId !== loadIdRef.current) return
           setUser(authUser)
           setError(null)
+        } else {
+          setUser(null)
         }
       } catch (e) {
         console.error('Auth init error:', e)
@@ -118,31 +156,31 @@ export function useAuthLogic() {
 
     getInitialSession()
 
-    // Part 2: Listen for auth state changes (sign-in, sign-out, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return
+      if (event === 'INITIAL_SESSION') return
 
-        // Skip INITIAL_SESSION — getInitialSession() handles it
-        if (event === 'INITIAL_SESSION') return
+      // Si login() est en cours, il gère tout lui-même
+      if (loginInProgressRef.current && event === 'SIGNED_IN') return
 
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          if (session) {
-            const authUser = await loadProfile(session)
-            if (!mounted) return
-            if (authUser) {
-              setUser(prev => {
-                if (prev?.id === authUser.id && prev?.role_id === authUser.role_id) return prev
-                return authUser
-              })
-              setError(null)
-            }
-          }
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null)
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (!session) return
+        const currentLoadId = ++loadIdRef.current
+        const authUser = await loadProfile(session)
+        if (!mounted || currentLoadId !== loadIdRef.current) return
+        if (authUser) {
+          setUser(authUser)
+          setError(null)
         }
+        setLoading(false)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setError(null)
+        setLoading(false)
       }
-    )
+    })
 
     return () => {
       mounted = false
@@ -150,60 +188,100 @@ export function useAuthLogic() {
     }
   }, [loadProfile, supabase])
 
+  // ── login ────────────────────────────────────────────────────────────────
+
   const login = useCallback(
     async (email: string, password: string): Promise<boolean> => {
       setLoading(true)
       setError(null)
+      loginInProgressRef.current = true
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      try {
+        const { data, error: signInError } =
+          await supabase.auth.signInWithPassword({ email, password })
 
-      if (signInError) {
-        setError(
-          signInError.message === 'Invalid login credentials'
-            ? 'Email ou mot de passe incorrect'
-            : signInError.message
-        )
-        setLoading(false)
+        if (signInError) {
+          setError(
+            signInError.message === 'Invalid login credentials'
+              ? 'Email ou mot de passe incorrect'
+              : signInError.message,
+          )
+          return false
+        }
+
+        if (!data.session) {
+          setError('Session introuvable après connexion')
+          return false
+        }
+
+        const authUser = await loadProfile(data.session)
+
+        if (!authUser) {
+          setError('Profil introuvable — contactez un administrateur')
+          await supabase.auth.signOut()
+          return false
+        }
+
+        if (authUser.is_active === false) {
+          setError('Votre compte est désactivé')
+          await supabase.auth.signOut()
+          return false
+        }
+
+        setUser(authUser)
+
+        const roleName = authUser.role?.name || ''
+        router.push(getRedirectPath(roleName))
+        return true
+      } catch (e) {
+        console.error('Login error:', e)
+        setError('Erreur inattendue — réessayez')
         return false
+      } finally {
+        setLoading(false)
+        loginInProgressRef.current = false
       }
-
-      // onAuthStateChange will fire SIGNED_IN and load the profile.
-      // Wait a moment for it to resolve, then redirect.
-      await new Promise(r => setTimeout(r, 300))
-
-      const roleName = user?.role?.name || ''
-      if (roleName === 'super_admin') {
-        router.push('/dashboard')
-      } else if (roleName === 'cuisinier') {
-        router.push('/inventory')
-      } else {
-        router.push('/daily')
-      }
-      return true
     },
-    [supabase, router, user]
+    [supabase, router, loadProfile],
   )
 
+  // ── logout ───────────────────────────────────────────────────────────────
+
   const logout = useCallback(async () => {
-    await supabase.auth.signOut()
     setUser(null)
-    router.push('/login')
+    setError(null)
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.error('Logout error:', e)
+    } finally {
+      router.push('/login')
+    }
   }, [supabase, router])
+
+  // ── refreshUser ──────────────────────────────────────────────────────────
 
   const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return null
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        setUser(null)
+        return null
+      }
+
       const authUser = await loadProfile(session)
-      if (authUser) setUser(authUser)
+      setUser(authUser)
       return authUser
-    } catch {
+    } catch (e) {
+      console.error('refreshUser error:', e)
       return null
     }
   }, [supabase, loadProfile])
+
+  // ── Permission helpers ───────────────────────────────────────────────────
 
   const can = useCallback(
     (permission: string): boolean => {
@@ -211,21 +289,23 @@ export function useAuthLogic() {
       if (user.permissions.includes('super_admin')) return true
       return user.permissions.includes(permission)
     },
-    [user]
+    [user],
   )
 
   const canAny = useCallback(
-    (...permissions: string[]): boolean => permissions.some(p => can(p)),
-    [can]
+    (...permissions: string[]): boolean => permissions.some((p) => can(p)),
+    [can],
   )
 
-  const value = useMemo<AuthContextValue>(
+  // ── Valeur du contexte ───────────────────────────────────────────────────
+
+  return useMemo<AuthContextValue>(
     () => ({ user, loading, error, login, logout, refreshUser, can, canAny }),
-    [user, loading, error, login, logout, refreshUser, can, canAny]
+    [user, loading, error, login, logout, refreshUser, can, canAny],
   )
-
-  return value
 }
+
+// ─── Consumer hook ─────────────────────────────────────────────────────────
 
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext)
